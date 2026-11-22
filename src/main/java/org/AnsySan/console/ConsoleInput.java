@@ -15,8 +15,7 @@ public class ConsoleInput {
     }
 
     public void printAvailableCommands() {
-        String availableCommands = (String)Arrays.stream(ConsoleOperationType.values()).map(Enum::name).collect(Collectors.joining(", "));
-        System.out.println("Available commands: " + availableCommands);
+        System.out.println("Available commands: " + getAvailableCommands());
     }
 
     public String readRequiredString(String prompt) {
@@ -37,9 +36,15 @@ public class ConsoleInput {
         } else {
             try {
                 return Integer.parseInt(value);
-            } catch (NumberFormatException var4) {
+            } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("Invalid integer format: '" + value + "'");
             }
         }
+    }
+
+    String getAvailableCommands() {
+        return Arrays.stream(ConsoleOperationType.values())
+                .map(Enum::name)
+                .collect(Collectors.joining(", "));
     }
 }

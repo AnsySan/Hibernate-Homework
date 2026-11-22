@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class UserService {
     private int idCounter;
-    private final Map<Integer, User> userMap = new HashMap();
-    private final Set<String> setlogin = new HashSet();
+    private final Map<Integer, User> userMap = new HashMap<>();
+    private final Set<String> setlogin = new HashSet<>();
     private final AccountService accountService;
 
     @Autowired
@@ -28,8 +28,8 @@ public class UserService {
         if (this.setlogin.contains(correctLogin)) {
             throw new IllegalArgumentException("User already exists with login=%s".formatted(correctLogin));
         } else {
-            ++this.idCounter;
-            User user = new User(this.idCounter, correctLogin, new ArrayList());
+            idCounter++;
+            User user = new User(this.idCounter, correctLogin, new ArrayList<>());
             this.accountService.createAccount(user);
             this.userMap.put(this.idCounter, user);
             this.setlogin.add(correctLogin);

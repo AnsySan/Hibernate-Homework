@@ -1,6 +1,5 @@
 package org.AnsySan.operation.commands;
 
-import java.io.PrintStream;
 import java.util.Comparator;
 import org.AnsySan.account.Account;
 import org.AnsySan.account.AccountService;
@@ -25,12 +24,11 @@ public class CloseAccountCommand implements OperationCommand {
         int accountId = this.consoleInput.readRequiredInt("Enter account id to close:");
         Account result = this.accountService.close(accountId);
         int targetAccountId = ((Account)this.accountService.getUserAccounts(result.getUserId()).stream().min(Comparator.comparingInt(Account::getId)).orElseThrow(() -> new IllegalStateException("No target account found"))).getId();
-        PrintStream var10000 = System.out;
-        int var10001 = result.getId();
-        var10000.println("Account " + var10001 + " closed. Remaining balance " + result.getMoneyAmount() + " transferred to account " + targetAccountId);
+        int id = result.getId();
+        System.out.println("Account " + id + " closed. Remaining balance " + result.getMoneyAmount() + " transferred to account " + targetAccountId);
     }
 
     public ConsoleOperationType getOperationType() {
-        return ConsoleOperationType.ACCOUNT_CLOSE;
+        return ConsoleOperationType.ACCOUNT_CLOSED;
     }
 }

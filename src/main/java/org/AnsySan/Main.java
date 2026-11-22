@@ -9,7 +9,7 @@ public class Main {
     }
 
     static void main() {
-        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(new Class[]{ApplicationConfiguration.class})) {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ApplicationConfiguration.class)) {
             OperationConsoleListener listener = (OperationConsoleListener)context.getBean(OperationConsoleListener.class);
             listener.start();
         }

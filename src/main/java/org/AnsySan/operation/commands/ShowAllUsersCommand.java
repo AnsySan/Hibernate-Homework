@@ -24,9 +24,7 @@ public class ShowAllUsersCommand implements OperationCommand {
         if (users.isEmpty()) {
             System.out.println("No users found.");
         } else {
-            PrintStream var10001 = System.out;
-            Objects.requireNonNull(var10001);
-            users.forEach(var10001::println);
+            System.out.println(users);
         }
     }
 

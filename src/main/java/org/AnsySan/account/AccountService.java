@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
-public class AccountService {
+public class AccountService extends AbstractAccountService {
     private int idCounter = 0;
     private final Map<Integer, Account> mapAccounts;
     private final UserService userService;
@@ -21,7 +21,7 @@ public class AccountService {
     @Autowired
     public AccountService(@Lazy UserService userService, AccountProperties accountProperties) {
         this.userService = userService;
-        this.mapAccounts = new HashMap();
+        this.mapAccounts = new HashMap<>();
         this.accountProperties = accountProperties;
     }
 
@@ -43,16 +43,14 @@ public class AccountService {
     }
 
     public Account deposit(int accountId, int amount) {
-        this.validatePositiveId(accountId);
-        this.validatePositiveAmount(amount);
+        validate(accountId, amount);
         Account account = (Account)this.findAccountById(accountId).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(accountId)));
         account.setMoneyAmount(account.getMoneyAmount() + amount);
         return account;
     }
 
     public void withdraw(int accountId, int amount) {
-        this.validatePositiveId(accountId);
-        this.validatePositiveAmount(amount);
+        validate(accountId, amount);
         Account account = (Account)this.findAccountById(accountId).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(accountId)));
         if (amount > account.getMoneyAmount()) {
             throw new IllegalArgumentException("insufficient funds on account id=%s, moneyAmount=%s, attempted withdraw=%s".formatted(account.getId(), account.getMoneyAmount(), amount));
@@ -75,7 +73,6 @@ public class AccountService {
             } else {
                 boolean sameUser = accountFrom.getUserId() == accountTo.getUserId();
                 int amountToTransfer = sameUser ? amount : (int)Math.round((double)amount * ((double)1.0F - this.accountProperties.getTransferCommission()));
-                int var10000 = amount - amountToTransfer;
                 int sourceAfter = Math.subtractExact(accountFrom.getMoneyAmount(), amount);
                 int targetAfter = Math.addExact(accountTo.getMoneyAmount(), amountToTransfer);
                 accountFrom.setMoneyAmount(sourceAfter);
@@ -86,19 +83,19 @@ public class AccountService {
 
     public Account close(int id) {
         this.validatePositiveId(id);
-        Account accountClose = (Account)this.findAccountById(id).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(id)));
-        User owner = (User)this.userService.findUserById(accountClose.getUserId()).orElseThrow(() -> new IllegalStateException("Owner not found for account id=" + id));
-        int userId = accountClose.getUserId();
+        Account accountClosed = (Account)this.findAccountById(id).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(id)));
+        User owner = (User)this.userService.findUserById(accountClosed.getUserId()).orElseThrow(() -> new IllegalArgumentException("Owner not found for account id=" + id));
+        int userId = accountClosed.getUserId();
         List<Account> userAccount = this.getUserAccounts(userId);
         if (userAccount.size() == 1) {
             throw new IllegalStateException("Can't close the only one account");
         } else {
             Account accountToTransferMoney = (Account)userAccount.stream().filter((it) -> it.getId() != id).min(Comparator.comparingInt(Account::getId)).orElseThrow(() -> new IllegalArgumentException("No target account found"));
-            int newAmount = Math.addExact(accountToTransferMoney.getMoneyAmount(), accountClose.getMoneyAmount());
+            int newAmount = Math.addExact(accountToTransferMoney.getMoneyAmount(), accountClosed.getMoneyAmount());
             accountToTransferMoney.setMoneyAmount(newAmount);
             this.mapAccounts.remove(id);
             owner.getAccountList().removeIf((account) -> account.getId() == id);
-            return accountClose;
+            return accountClosed;
         }
     }
 
@@ -107,17 +104,6 @@ public class AccountService {
         return Optional.ofNullable((Account)this.mapAccounts.get(idAccount));
     }
 
-    private void validatePositiveId(Integer id) {
-        if (id == null || id <= 0) {
-            throw new IllegalArgumentException("must be > 0");
-        }
-    }
-
-    private void validatePositiveAmount(Integer amount) {
-        if (amount == null || amount <= 0) {
-            throw new IllegalArgumentException("amount must be > 0");
-        }
-    }
 
     public List<Account> getUserAccounts(Integer userId) {
         return this.mapAccounts.values().stream().filter((it) -> userId.equals(it.getUserId())).toList();

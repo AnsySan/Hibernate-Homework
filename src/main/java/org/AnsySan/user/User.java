@@ -31,7 +31,6 @@ public class User {
     }
 
     public String toString() {
-        int var10000 = this.id;
-        return "User{id=" + var10000 + ", login='" + this.login + "', accountList=" + String.valueOf(this.accountList) + "}";
+        return "User{id=" + id + ", login='" + this.login + "', accountList=" + String.valueOf(this.accountList) + "}";
     }
 }

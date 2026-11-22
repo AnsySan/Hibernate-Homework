@@ -29,12 +29,15 @@ public class TransferAccountCommand implements OperationCommand {
         int amountToTransfer = sameUser ? amount : (int)Math.round((double)amount * ((double)1.0F - this.accountService.getTransferCommission()));
         int commission = amount - amountToTransfer;
         this.accountService.transfer(fromAccountId, toAccountId, amount);
-        if (sameUser) {
-            System.out.println("Transfer completed from account " + fromAccountId + " to account " + toAccountId + ". Amount: " + amount + " (no commission, same user)");
-        } else {
-            System.out.println("Transfer completed from account " + fromAccountId + " to account " + toAccountId + ". Amount: " + amount + ", commission: " + commission + ", recipient received: " + amountToTransfer);
-        }
+        String transferMessage = "Transfer completed from account "
+                + fromAccountId + " to account " + toAccountId
+                + ". Amount: " + amount;
 
+        if (sameUser) {
+            System.out.println(transferMessage + " (no commission, same user)");
+        } else {
+            System.out.println(transferMessage + ", commission: " + commission + ", recipient received: " + amountToTransfer);
+        }
     }
 
     public ConsoleOperationType getOperationType() {
