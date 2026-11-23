@@ -1,22 +1,37 @@
 package org.AnsySan.account;
 
-public class Account {
-    public int id;
-    public int userId;
-    public int moneyAmount;
+import jakarta.persistence.*;
+import org.AnsySan.user.User;
 
-    public Account(int id, int userId, int moneyAmount) {
-        this.id = id;
-        this.userId = userId;
-        this.moneyAmount = moneyAmount;
+@Entity
+@Table(name = "accounts")
+public class Account {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Column(name = "money_amount", nullable = false)
+    private int moneyAmount;
+
+    protected Account() {
     }
 
-    public int getId() {
+    public Account(User user, int moneyAmount) {
+        if (user == null) throw new IllegalArgumentException("user must not be null");
+        setMoneyAmount(moneyAmount);
+        this.user = user;
+    }
+
+    public Integer getId() {
         return this.id;
     }
 
-    public int getUserId() {
-        return this.userId;
+    public Integer getUserId() {
+        return user == null ? null : user.getId();
     }
 
     public int getMoneyAmount() {
@@ -28,6 +43,10 @@ public class Account {
     }
 
     public String toString() {
-        return "Account{id=" + this.id + ", userId=" + this.userId + ", moneyAmount=" + this.moneyAmount + "}";
+        return "Account{id=" + this.id + ", userId=" + getUserId() + ", moneyAmount=" + this.moneyAmount + "}";
+    }
+
+    public User getUser() {
+        return user;
     }
 }

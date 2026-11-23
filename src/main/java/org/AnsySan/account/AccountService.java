@@ -1,62 +1,76 @@
 package org.AnsySan.account;
 
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+
+import org.AnsySan.transaction.TransactionManager;
 import org.AnsySan.user.User;
-import org.AnsySan.user.UserService;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 @Component
 public class AccountService extends AbstractAccountService {
-    private int idCounter = 0;
-    private final Map<Integer, Account> mapAccounts;
-    private final UserService userService;
-    private final AccountProperties accountProperties;
+    private final SessionFactory sessionFactory;
+    private final TransactionManager transactionManager;
+    private final AccountProperties properties;
 
     @Autowired
-    public AccountService(@Lazy UserService userService, AccountProperties accountProperties) {
-        this.userService = userService;
-        this.mapAccounts = new HashMap<>();
-        this.accountProperties = accountProperties;
+    public AccountService(SessionFactory sessionFactory, TransactionManager transactionManager, AccountProperties properties) {
+        this.sessionFactory = sessionFactory;
+        this.transactionManager = transactionManager;
+        this.properties = properties;
     }
 
-    public Account createAccount(User user) {
-        if (user == null) {
-            throw new IllegalArgumentException("User not found");
-        } else {
-            ++this.idCounter;
-            Account account = new Account(this.idCounter, user.getId(), this.accountProperties.getDefaultAmount());
-            this.mapAccounts.put(this.idCounter, account);
-            user.getAccountList().add(account);
-            return account;
-        }
+    public void createAccount(User user) {
+        this.validatePositiveId(user.getId());
+        transactionManager.execute(() -> {
+            Session session = sessionFactory.getCurrentSession();
+            User userAccount = session.find(User.class, user.getId());
+            if (userAccount == null) {
+                throw new IllegalArgumentException("User not found: id=" + user.getId());
+            } else {
+                Account account = new Account(userAccount, properties.getDefaultAmount());
+                userAccount.addAccount(account);
+                session.persist(account);
+                return account;
+            }
+        });
     }
 
     public Account createAccountForUser(int userId) {
-        User user = (User)this.userService.findUserById(userId).orElseThrow(() -> new IllegalArgumentException("No such user: id=" + userId));
-        return this.createAccount(user);
+        this.validatePositiveId(userId);
+        return transactionManager.execute(() -> {
+            User user = sessionFactory.getCurrentSession().find(User.class, userId);
+            if (user == null) {
+                throw new IllegalArgumentException("No such user: id=" + userId);
+            } else {
+                Account account = new Account(user, properties.getDefaultAmount());
+                user.addAccount(account);
+                sessionFactory.getCurrentSession().persist(account);
+                return account;
+            }
+        });
     }
 
     public Account deposit(int accountId, int amount) {
         validate(accountId, amount);
-        Account account = (Account)this.findAccountById(accountId).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(accountId)));
-        account.setMoneyAmount(account.getMoneyAmount() + amount);
-        return account;
+        return transactionManager.execute(() -> {
+            Account account = requireAccount(accountId);
+            account.setMoneyAmount(Math.addExact(account.getMoneyAmount(), amount));
+            return account;
+        });
     }
 
     public void withdraw(int accountId, int amount) {
         validate(accountId, amount);
-        Account account = (Account)this.findAccountById(accountId).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(accountId)));
-        if (amount > account.getMoneyAmount()) {
-            throw new IllegalArgumentException("insufficient funds on account id=%s, moneyAmount=%s, attempted withdraw=%s".formatted(account.getId(), account.getMoneyAmount(), amount));
-        } else {
-            account.setMoneyAmount(account.getMoneyAmount() - amount);
-        }
+        transactionManager.execute(() -> {
+            Account account = requireAccount(accountId);
+            account.setMoneyAmount(Math.addExact(account.getMoneyAmount(), amount));
+            return account;
+        });
     }
 
     public void transfer(int fromAccountId, int toAccountId, int amount) {
@@ -66,50 +80,59 @@ public class AccountService extends AbstractAccountService {
         if (fromAccountId == toAccountId) {
             throw new IllegalArgumentException("source and target account id must be different");
         } else {
-            Account accountFrom = (Account)this.findAccountById(fromAccountId).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(fromAccountId)));
-            Account accountTo = (Account)this.findAccountById(toAccountId).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(toAccountId)));
-            if (amount > accountFrom.getMoneyAmount()) {
-                throw new IllegalArgumentException("insufficient funds on account id=%s, moneyAmount=%s, attempted withdraw=%s".formatted(accountFrom.getId(), accountFrom.getMoneyAmount(), amount));
-            } else {
-                boolean sameUser = accountFrom.getUserId() == accountTo.getUserId();
-                int amountToTransfer = sameUser ? amount : (int)Math.round((double)amount * ((double)1.0F - this.accountProperties.getTransferCommission()));
-                int sourceAfter = Math.subtractExact(accountFrom.getMoneyAmount(), amount);
-                int targetAfter = Math.addExact(accountTo.getMoneyAmount(), amountToTransfer);
-                accountFrom.setMoneyAmount(sourceAfter);
-                accountTo.setMoneyAmount(targetAfter);
-            }
+            transactionManager.execute(() -> {
+                Account from = requireAccount(fromAccountId), to = requireAccount(toAccountId);
+                if (amount > from.getMoneyAmount()) {
+                    throw new IllegalArgumentException("insufficient funds on account id=%s, moneyAmount=%s, attempted withdraw=%s".formatted(from.getId(), from.getMoneyAmount(), amount));
+                } else {
+                    int received = from.getUserId().equals(to.getUserId()) ? amount
+                            : (int) Math.round(amount * (1.0 - properties.getTransferCommission()));
+                    int sourceAfter = Math.subtractExact(from.getMoneyAmount(), amount);
+                    int targetAfter = Math.addExact(to.getMoneyAmount(), received);
+                    from.setMoneyAmount(sourceAfter);
+                    to.setMoneyAmount(targetAfter);
+                }
+            });
         }
     }
 
     public Account close(int id) {
         this.validatePositiveId(id);
-        Account accountClosed = (Account)this.findAccountById(id).orElseThrow(() -> new IllegalArgumentException("Account with id=%s not found".formatted(id)));
-        User owner = (User)this.userService.findUserById(accountClosed.getUserId()).orElseThrow(() -> new IllegalArgumentException("Owner not found for account id=" + id));
-        int userId = accountClosed.getUserId();
-        List<Account> userAccount = this.getUserAccounts(userId);
-        if (userAccount.size() == 1) {
-            throw new IllegalStateException("Can't close the only one account");
-        } else {
-            Account accountToTransferMoney = (Account)userAccount.stream().filter((it) -> it.getId() != id).min(Comparator.comparingInt(Account::getId)).orElseThrow(() -> new IllegalArgumentException("No target account found"));
-            int newAmount = Math.addExact(accountToTransferMoney.getMoneyAmount(), accountClosed.getMoneyAmount());
-            accountToTransferMoney.setMoneyAmount(newAmount);
-            this.mapAccounts.remove(id);
-            owner.getAccountList().removeIf((account) -> account.getId() == id);
-            return accountClosed;
-        }
+        return transactionManager.execute(() -> {
+            Session session = sessionFactory.getCurrentSession();
+            Account closed = requireAccount(id);
+            User owner = closed.getUser();
+            List<Account> accounts = session.createQuery("select a from Account a where a.user.id = :uid order by a.id", Account.class)
+                    .setParameter("uid", owner.getId()).getResultList();
+            if (accounts.size() <= 1) throw new IllegalStateException("Can't close the only one account");
+            Account target = accounts.stream().filter(account -> !account.getId().equals(id)).min(Comparator.comparing(Account::getId)).orElseThrow();
+            target.setMoneyAmount(Math.addExact(target.getMoneyAmount(), closed.getMoneyAmount()));
+            owner.removeAccount(closed);
+            session.remove(closed);
+            return closed;
+        });
     }
 
     public Optional<Account> findAccountById(Integer idAccount) {
         this.validatePositiveId(idAccount);
-        return Optional.ofNullable((Account)this.mapAccounts.get(idAccount));
+        return transactionManager.execute(() -> Optional.ofNullable(sessionFactory.getCurrentSession().find(Account.class, idAccount)));
     }
 
 
     public List<Account> getUserAccounts(Integer userId) {
-        return this.mapAccounts.values().stream().filter((it) -> userId.equals(it.getUserId())).toList();
+        validatePositiveId(userId);
+        return transactionManager.execute(() -> sessionFactory.getCurrentSession()
+                .createQuery("select a from Account a where a.user.id = :uid order by a.id", Account.class)
+                .setParameter("uid", userId).getResultList());
     }
 
     public double getTransferCommission() {
-        return this.accountProperties.getTransferCommission();
+        return properties.getTransferCommission();
+    }
+
+    private Account requireAccount(int id) {
+        Account account = sessionFactory.getCurrentSession().find(Account.class, id);
+        if (account == null) throw new IllegalArgumentException("Account with id=%s not found".formatted(id));
+        return account;
     }
 }
