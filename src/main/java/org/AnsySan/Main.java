@@ -5,12 +5,9 @@ import org.AnsySan.console.OperationConsoleListener;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 public class Main {
-    public Main() {
-    }
-
     static void main() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ApplicationConfiguration.class)) {
-            OperationConsoleListener listener = (OperationConsoleListener)context.getBean(OperationConsoleListener.class);
+            OperationConsoleListener listener = context.getBean(OperationConsoleListener.class);
             listener.start();
         }
     }

@@ -1,20 +1,32 @@
 package org.AnsySan.user;
 
+import java.util.ArrayList;
 import java.util.List;
+
+import jakarta.persistence.*;
 import org.AnsySan.account.Account;
 
+@Entity
+@Table(name = "users")
 public class User {
-    public int id;
-    public String login;
-    public List<Account> accountList;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
-    public User(int id, String login, List<Account> accountList) {
-        this.id = id;
-        this.login = login;
-        this.accountList = accountList;
+    @Column(name = "login", nullable = false, unique = true, length = 100)
+    private String login;
+
+    @OneToMany(mappedBy = "user", fetch = FetchType.EAGER)
+    private List<Account> accountList = new ArrayList<>();
+
+    protected User() {
     }
 
-    public int getId() {
+    public User(String login) {
+        this.login = login;
+    }
+
+    public Integer getId() {
         return this.id;
     }
 
@@ -31,6 +43,14 @@ public class User {
     }
 
     public String toString() {
-        return "User{id=" + id + ", login='" + this.login + "', accountList=" + String.valueOf(this.accountList) + "}";
+        return "User{id=" + id + ", login='" + this.login + "', accountList=" + this.accountList + "}";
+    }
+
+    public void addAccount(Account account) {
+        accountList.add(account);
+    }
+
+    public void removeAccount(Account closed) {
+        accountList.remove(closed);
     }
 }

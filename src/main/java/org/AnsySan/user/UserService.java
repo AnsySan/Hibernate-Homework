@@ -1,40 +1,41 @@
 package org.AnsySan.user;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import org.AnsySan.account.AccountService;
+import org.AnsySan.transaction.TransactionManager;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public class UserService {
-    private int idCounter;
-    private final Map<Integer, User> userMap = new HashMap<>();
-    private final Set<String> setlogin = new HashSet<>();
+    private final SessionFactory sessionFactory;
+    private final TransactionManager transactionManager;
     private final AccountService accountService;
 
     @Autowired
-    public UserService(AccountService accountService) {
+    public UserService(SessionFactory sessionFactory, TransactionManager transactionManager, AccountService accountService) {
+        this.sessionFactory = sessionFactory;
+        this.transactionManager = transactionManager;
         this.accountService = accountService;
     }
 
     public User createUser(String login) {
-        String correctLogin = this.validateLogin(login);
-        if (this.setlogin.contains(correctLogin)) {
-            throw new IllegalArgumentException("User already exists with login=%s".formatted(correctLogin));
-        } else {
-            idCounter++;
-            User user = new User(this.idCounter, correctLogin, new ArrayList<>());
-            this.accountService.createAccount(user);
-            this.userMap.put(this.idCounter, user);
-            this.setlogin.add(correctLogin);
+        String correctLogin = validateLogin(login);
+        return transactionManager.execute(() ->{
+            Session session = sessionFactory.getCurrentSession();
+            Long count = session.createQuery("select count(u) from User u where u.login= :login", Long.class)
+                    .setParameter("login", correctLogin).getSingleResult();
+            if (count > 0){
+                throw new IllegalArgumentException("User already exists with login=%s".formatted(correctLogin));
+            }
+            User user = new User(correctLogin);
+            session.persist(user);
+            accountService.createAccount(user);
             return user;
-        }
+        });
     }
 
     private String validateLogin(String login) {
@@ -46,10 +47,15 @@ public class UserService {
     }
 
     public Optional<User> findUserById(int id) {
-        return Optional.ofNullable((User)this.userMap.get(id));
+        if (id <= 0) throw new IllegalArgumentException("ID must be > 0");
+        return transactionManager.execute(() -> Optional.ofNullable(sessionFactory.getCurrentSession().createQuery(
+                        "select distinct u from User u left join fetch u.accountList where u.id = :id", User.class)
+                .setParameter("id", id).uniqueResult()));
     }
 
     public List<User> findAll() {
-        return this.userMap.values().stream().toList();
+        return transactionManager.execute(() -> sessionFactory.getCurrentSession()
+                .createQuery("select distinct u from User u left join fetch u.accountList order by u.id", User.class)
+                .getResultList());
     }
 }
